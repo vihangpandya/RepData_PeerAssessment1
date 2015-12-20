@@ -4,22 +4,140 @@ output:
   html_document:
     keep_md: true
 ---
-
+```{r, echo=FALSE}
+library (datasets)
+library (data.table)
+#library(kernlab)
+library (chron)
+library (lubridate)
+library (dplyr)
+library (ggplot2)
+library(data.table)
+```
 
 ## Loading and preprocessing the data
 
+The data does not include values for some days. (NA)
 
+First read in the data and name the columns appropriately.
+
+```{r}
+stepdat <- read.table("./activity.csv",sep = ",",skip = 1, colClasses = c("numeric",
+                                                                          "Date","numeric"))
+cnames <- c("step","date","interval")
+names(stepdat) <- make.names(cnames)
+head (stepdat)
+```
 
 ## What is mean total number of steps taken per day?
+Determine the total for all 61 days and name the columns of the new dataframe "daytotal"
+Eliminate days with NA values
 
+```{r}
+daytotal <- aggregate(list(stepdat$step), list(stepdat$date),sum, na.rm = TRUE)
+head (daytotal)
+names(daytotal) <- make.names(c("date","daily_total_steps"))
+```
 
+Make a histogram that shows a distribution of steps
+
+```{r, echo=FALSE}
+hist(daytotal$daily_total_steps, col="blue", main="Total Daily Steps", xlab="Daily Total Steps", 
+     breaks = 25, xlim = c(0,25000))
+```
+Meadian and Mean values are observed in the table below:
+```{r, echo=FALSE}
+summary (daytotal)
+```
+Determine number of NAs in the dataset
+```{r, echo=FALSE}
+totalNA <- sum(is.na(stepdat$step))
+print (totalNA)
+
+print (totalNA)
+```
+
+Approach 1 for handling missing values:
+For days that have all NAs replace with the mean value for all 61 days
+Mean is 9354 steps as observed in summary
+
+To do that: 
+Step 1: Replace 0s in daytotal with the 9354 (daily mean of total steps)
+
+```{r, echo=FALSE}
+head (daytotal)
+tmpdailytotalsteps <- data.frame(daytotal$daily_total_steps)
+tmpdailytotalsteps[(tmpdailytotalsteps == 0)] <- round(mean(daytotal$daily_total_steps),0)
+names(tmpdailytotalsteps) <- make.names("dailytotalsteps")
+head (tmpdailytotalsteps)
+```
+
+Combines the columns to the daytotal dataframe
+```{r, echo=FALSE}
+daytotal <- cbind (daytotal, tmpdailytotalsteps)
+head (daytotal)
+```
+Create a histogram that compares approach 1 (removing NAs) to approach 2 (substitiuting NA w/ avg values)
+```{r, echo=FALSE}
+par(mfrow = c (2,1))
+hist(daytotal$dailytotalsteps, col="green", main="Total Daily Steps with modified NA values", 
+     xlab="Daily Total Steps", breaks = 25, xlim = c(0,25000))
+hist(daytotal$daily_total_steps, col="blue", main="Total Daily Steps with eliminating NA values", 
+     xlab="Daily Total Steps", breaks = 25, xlim = c(0,25000))
+summary (daytotal)
+```
+Notice the change in median and mean values from the 2 approaches.
+```{r, echo=FALSE}
+summary (daytotal)
+```
 
 ## What is the average daily activity pattern?
 
+Q2: Convert the intervals to factors so that we can see which interval has largest number of steps.
+```{r, echo=FALSE}
+stepdat <- mutate (stepdat, interval = factor(interval))
+str (stepdat)
+```
+Above, we notice 288 levels
+
+Calculate the mean for each interval across all days.
+However since, few days have no data I will replace "NAs" for those days with the 
+average of daily datasteps (9354) divided by the number of intervals (288)
+
+```{r, echo=FALSE}
+stepdat[is.na(stepdat)] <- round(mean(daytotal$dailytotalsteps)/288)
+```
 
 
-## Imputing missing values
+Question 2 - First using weekdays function, determine the days of the week for all 61 days.
+```{r, echo=FALSE}
+intervalavg <- data.frame (tapply(stepdat$step, stepdat$interval, mean))
+names(intervalavg) <- make.names("interval_mean_for_all_days")
+```
 
-
+Create the timeline graph across intervals
+```{r, echo=FALSE}
+par(mfrow = c (2,1))
+with (intervalavg, plot(interval_mean_for_all_days, 
+                        main = "Mean Interval Steps", type = "l", 
+                        xlab ="Interval", ylab = "Steps"))
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+Quesstion 2 - Create factors from dayofweek variable, so that we can do analysis.
+First identify which day of the week.
+```{r, echo=FALSE}
+daytotal <- mutate (daytotal, dayofweek = weekdays(date))
+daytotal$weekend = is.weekend(daytotal$date)
+str(daytotal)
+```
+
+Calculate the total steps for weekend or weekday and compare workkday (FALSE) and weekend (TRUE)
+```{r, echo=FALSE}
+stepsbydaytype  <- data.frame (tapply(daytotal$dailytotalsteps, daytotal$weekend, mean))
+names(stepsbydaytype) <- make.names("meansteps")
+print (stepsbydaytype)
+par(mfrow = c (1,1))
+with (daytotal, boxplot(dailytotalsteps ~ weekend,
+                        main = "Mean Interval Steps by WorkDay and Weekend", 
+                        xlab ="Type of Day", ylab = "Steps"))
